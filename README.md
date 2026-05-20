@@ -5,7 +5,7 @@
 Данные хранятся локально в браузере. Приложение можно установить как PWA на телефон или собрать APK через PWABuilder.
 
 ## Ссылка на приложение
-[https://твой_логин.github.io/mirtash-sales/](https://garlarvalat-source.github.io/mirtash-sales1/)
+[click](https://garlarvalat-source.github.io/mirtash-sales1/)
 
 ## Функции
 - Выбор менеджера, управление списком менеджеров
