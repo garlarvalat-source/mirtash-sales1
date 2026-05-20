@@ -2,11 +2,13 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MIRTASH – студия натурального камня</title>
     <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>MIRTASH – учёт продаж</title>
+    <!-- SheetJS для импорта Excel в доставке -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -36,6 +38,31 @@
             font-size: 14px;
             opacity: 0.8;
         }
+        .tabs {
+            display: flex;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            border-radius: 0;
+            overflow: hidden;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 12px 8px;
+            background: #f8f9fa;
+            border: none;
+            border-bottom: 3px solid transparent;
+            font-weight: 600;
+            font-size: 14px;
+            color: #636e72;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .tab.active {
+            background: white;
+            color: #0984e3;
+            border-bottom-color: #0984e3;
+        }
         .card {
             background: white;
             border-radius: 0 0 10px 10px;
@@ -43,23 +70,41 @@
             padding: 20px;
             margin-bottom: 20px;
         }
-        .manager-selector {
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        /* Общие элементы форм и таблиц */
+        .manager-selector, .search-box, .btn-group, .filters {
             display: flex;
-            align-items: center;
             gap: 10px;
             margin-bottom: 15px;
             flex-wrap: wrap;
+            align-items: center;
         }
-        .manager-selector label {
-            font-weight: 600;
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
         }
-        select {
-            padding: 8px 12px;
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        .form-group label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            font-size: 14px;
+        }
+        input, select {
+            padding: 10px 12px;
             border-radius: 6px;
             border: 1px solid #ddd;
             font-size: 16px;
-            flex: 1;
-            min-width: 180px;
+            width: 100%;
         }
         button {
             padding: 8px 14px;
@@ -92,28 +137,6 @@
             padding: 4px 10px;
             font-size: 13px;
         }
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 15px;
-        }
-        .form-group {
-            display: flex;
-            flex-direction: column;
-        }
-        .form-group label {
-            font-weight: 500;
-            margin-bottom: 5px;
-            font-size: 14px;
-        }
-        input, select {
-            padding: 10px 12px;
-            border-radius: 6px;
-            border: 1px solid #ddd;
-            font-size: 16px;
-            width: 100%;
-        }
         .table-container {
             overflow-x: auto;
             margin-top: 15px;
@@ -132,12 +155,36 @@
             background: #f1f2f6;
             font-weight: 600;
         }
-        .filters {
-            display: flex;
-            gap: 10px;
-            align-items: center;
-            flex-wrap: wrap;
+        td[contenteditable="true"] {
+            background: #fffde7;
+            cursor: text;
+        }
+        td[contenteditable="true"]:focus {
+            outline: 2px solid #0984e3;
+            background: #e3f2fd;
+        }
+        .delete-btn {
+            background: transparent;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            padding: 0 5px;
+        }
+        .result-box {
+            background: #dff9fb;
+            border: 1px solid #c7ecee;
+            border-radius: 8px;
+            padding: 15px;
             margin: 15px 0;
+            text-align: left;
+        }
+        .result-box p {
+            font-size: 16px;
+            margin: 5px 0;
+        }
+        .result-box span {
+            font-weight: 700;
+            color: #0984e3;
         }
         .summary {
             background: #dfe6e9;
@@ -147,15 +194,6 @@
             display: flex;
             justify-content: space-between;
             flex-wrap: wrap;
-        }
-        .summary span {
-            font-weight: 600;
-        }
-        .btn-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-            margin-top: 10px;
         }
         .modal-overlay {
             position: fixed;
@@ -197,13 +235,18 @@
         .add-manager-form input {
             flex: 1;
         }
+        input[type="file"] {
+            display: none;
+        }
         @media (max-width: 600px) {
             .form-grid {
                 grid-template-columns: 1fr;
             }
-            .manager-selector {
-                flex-direction: column;
-                align-items: flex-start;
+            .tabs {
+                flex-wrap: wrap;
+            }
+            .tab {
+                flex: 1 0 auto;
             }
         }
     </style>
@@ -211,565 +254,957 @@
 <body>
     <div class="header">
         <h1>MIRTASH СТУДИЯ</h1>
-        <div class="sub">Учёт продаж менеджера</div>
+        <div class="sub">Натуральный камень</div>
     </div>
 
-    <div class="card">
-        <div class="manager-selector">
-            <label for="managerSelect">👤 Менеджер:</label>
-            <select id="managerSelect"></select>
-            <button id="manageManagersBtn" class="secondary small">⚙️ Управление</button>
-        </div>
-
-        <div class="form-grid">
-            <div class="form-group">
-                <label for="product">Товар / услуга</label>
-                <input type="text" id="product" list="productList" placeholder="например: столешница гранит" autofocus>
-                <datalist id="productList"></datalist>
-            </div>
-            <div class="form-group">
-                <label for="price">Цена за шт (₽)</label>
-                <input type="number" id="price" step="0.01" min="0" placeholder="0.00">
-            </div>
-            <div class="form-group">
-                <label for="quantity">Количество</label>
-                <input type="number" id="quantity" step="1" min="1" value="1">
-            </div>
-            <div class="form-group">
-                <label for="saleTime">Время</label>
-                <input type="time" id="saleTime">
-            </div>
-            <div class="form-group">
-                <label for="total">Сумма (₽)</label>
-                <input type="number" id="total" readonly placeholder="0.00" style="background:#f1f2f6; font-weight:bold;">
-            </div>
-        </div>
-        <div class="btn-group">
-            <button id="addSaleBtn">➕ Добавить продажу</button>
-            <button id="clearFormBtn" class="secondary">🧹 Очистить форму</button>
-        </div>
-        <p style="font-size:12px; color:#636e72; margin-top:5px;">Сумма рассчитывается автоматически</p>
+    <!-- Вкладки -->
+    <div class="tabs">
+        <button class="tab active" data-tab="sales">📋 Учёт продаж</button>
+        <button class="tab" data-tab="calculator">🧮 Калькулятор отсыпки</button>
+        <button class="tab" data-tab="delivery">🚚 Доставка манипулятора</button>
     </div>
 
-    <div class="card">
-        <div class="filters">
-            <label for="filterDateFrom">📅 С:</label>
-            <input type="date" id="filterDateFrom">
-            <label for="filterDateTo">по:</label>
-            <input type="date" id="filterDateTo">
-            <button id="filterBtn">Применить фильтр</button>
-            <button id="resetFilterBtn" class="secondary">Сбросить</button>
+    <!-- ========== ВКЛАДКА 1: УЧЁТ ПРОДАЖ ========== -->
+    <div class="tab-content active" id="tab-sales">
+        <div class="card">
+            <div class="manager-selector">
+                <label for="managerSelect">👤 Менеджер:</label>
+                <select id="managerSelect"></select>
+                <button id="manageManagersBtn" class="secondary small">⚙️ Управление</button>
+            </div>
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="product">Товар / услуга</label>
+                    <input type="text" id="product" list="productList" placeholder="например: столешница гранит" autofocus>
+                    <datalist id="productList"></datalist>
+                </div>
+                <div class="form-group">
+                    <label for="price">Цена за шт (₽)</label>
+                    <input type="number" id="price" step="0.01" min="0" placeholder="0.00">
+                </div>
+                <div class="form-group">
+                    <label for="quantity">Количество</label>
+                    <input type="number" id="quantity" step="1" min="1" value="1">
+                </div>
+                <div class="form-group">
+                    <label for="saleTime">Время</label>
+                    <input type="time" id="saleTime">
+                </div>
+                <div class="form-group">
+                    <label for="total">Сумма (₽)</label>
+                    <input type="number" id="total" readonly placeholder="0.00" style="background:#f1f2f6; font-weight:bold;">
+                </div>
+            </div>
+            <div class="btn-group">
+                <button id="addSaleBtn">➕ Добавить продажу</button>
+                <button id="clearFormBtn" class="secondary">🧹 Очистить форму</button>
+            </div>
+            <p style="font-size:12px; color:#636e72; margin-top:5px;">Сумма рассчитывается автоматически</p>
         </div>
 
-        <div class="table-container">
-            <table id="salesTable">
-                <thead>
-                    <tr>
-                        <th>Дата</th>
-                        <th>Время</th>
-                        <th>Товар</th>
-                        <th>Цена/шт</th>
-                        <th>Кол-во</th>
-                        <th>Сумма</th>
-                    </tr>
-                </thead>
-                <tbody></tbody>
-            </table>
+        <div class="card">
+            <div class="filters">
+                <label for="filterDateFrom">📅 С:</label>
+                <input type="date" id="filterDateFrom">
+                <label for="filterDateTo">по:</label>
+                <input type="date" id="filterDateTo">
+                <button id="filterBtn">Применить фильтр</button>
+                <button id="resetFilterBtn" class="secondary">Сбросить</button>
+            </div>
+
+            <div class="table-container">
+                <table id="salesTable">
+                    <thead>
+                        <tr>
+                            <th>Дата</th>
+                            <th>Время</th>
+                            <th>Товар</th>
+                            <th>Цена/шт</th>
+                            <th>Кол-во</th>
+                            <th>Сумма</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
+            <div class="summary" id="summaryBlock">
+                <span>📦 Всего записей: <span id="totalRecords">0</span></span>
+                <span>💰 Общая сумма: <span id="totalAmount">0</span> ₽</span>
+            </div>
+
+            <div class="btn-group">
+                <button id="exportCSVBtn" class="secondary">📥 Скачать CSV</button>
+                <button id="clearHistoryBtn" class="danger">🗑️ Очистить мою историю</button>
+            </div>
         </div>
 
-        <div class="summary" id="summaryBlock">
-            <span>📦 Всего записей: <span id="totalRecords">0</span></span>
-            <span>💰 Общая сумма: <span id="totalAmount">0</span> ₽</span>
-        </div>
-
-        <div class="btn-group">
-            <button id="exportCSVBtn" class="secondary">📥 Скачать CSV</button>
-            <button id="clearHistoryBtn" class="danger">🗑️ Очистить мою историю</button>
+        <!-- Модальное окно управления менеджерами -->
+        <div class="modal-overlay" id="modalOverlay">
+            <div class="modal">
+                <h2>👥 Управление менеджерами</h2>
+                <div id="managersListContainer"></div>
+                <div class="add-manager-form">
+                    <input type="text" id="newManagerName" placeholder="Имя нового менеджера">
+                    <button id="addManagerBtn">➕ Добавить</button>
+                </div>
+                <div style="margin-top: 20px; text-align: right;">
+                    <button id="closeModalBtn" class="secondary">Закрыть</button>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="modal-overlay" id="modalOverlay">
-        <div class="modal">
-            <h2>👥 Управление менеджерами</h2>
-            <div id="managersListContainer"></div>
-            <div class="add-manager-form">
-                <input type="text" id="newManagerName" placeholder="Имя нового менеджера">
-                <button id="addManagerBtn">➕ Добавить</button>
+    <!-- ========== ВКЛАДКА 2: КАЛЬКУЛЯТОР ОТСЫПКИ ========== -->
+    <div class="tab-content" id="tab-calculator">
+        <div class="card">
+            <div class="form-grid">
+                <div class="form-group">
+                    <label for="calcArea">Площадь (м²)</label>
+                    <input type="number" id="calcArea" step="0.1" min="0" placeholder="0.0">
+                </div>
+                <div class="form-group">
+                    <label for="calcThickness">Толщина слоя (см)</label>
+                    <input type="number" id="calcThickness" step="0.1" min="0" placeholder="0.0">
+                </div>
+                <div class="form-group">
+                    <label for="calcMaterial">Материал</label>
+                    <select id="calcMaterial"></select>
+                </div>
+                <div class="form-group">
+                    <label for="calcFraction">Фракция</label>
+                    <select id="calcFraction"></select>
+                </div>
+                <div class="form-group">
+                    <label for="calcCustomDensity">Своя плотность (т/м³) <span style="font-weight:normal; font-size:12px;">(если нужно)</span></label>
+                    <input type="number" id="calcCustomDensity" step="0.01" min="0" placeholder="Авто из справочника">
+                </div>
             </div>
-            <div style="margin-top: 20px; text-align: right;">
-                <button id="closeModalBtn" class="secondary">Закрыть</button>
+
+            <div class="result-box">
+                <p>📐 Объём: <span id="calcVolume">—</span> м³</p>
+                <p>⚖️ Масса: <span id="calcWeightTon">—</span> т / <span id="calcWeightKg">—</span> кг</p>
+                <p>🎒 Мешков по 25 кг: <span id="calcBags">—</span> <span style="font-size:13px; color:#636e72;">(точное: <span id="calcBagsExact">—</span>)</span></p>
             </div>
+
+            <button id="calcResetBtn" class="secondary">🔄 Сбросить значения</button>
+
+            <p style="font-size:12px; color:#636e72; margin-top:15px;">
+                ⚙️ Плотности материалов можно изменить в таблице ниже.<br>
+                Если задана «Своя плотность», она используется вместо справочной.
+            </p>
+        </div>
+
+        <div class="card">
+            <h2 style="margin-bottom:10px;">📊 Справочник плотностей</h2>
+            <div class="table-container">
+                <table id="calcDensityTable">
+                    <thead>
+                        <tr>
+                            <th>Материал</th>
+                            <th>Плотность (т/м³)</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <button id="calcResetDensitiesBtn" class="secondary" style="margin-top:10px;">↩ Сбросить справочник</button>
+        </div>
+    </div>
+
+    <!-- ========== ВКЛАДКА 3: ДОСТАВКА МАНИПУЛЯТОРА ========== -->
+    <div class="tab-content" id="tab-delivery">
+        <div class="card">
+            <div class="search-box">
+                <input type="text" id="deliverySearch" placeholder="🔍 Поиск по всем столбцам...">
+            </div>
+            <div class="btn-group">
+                <button id="deliveryAddRowBtn">➕ Добавить строку</button>
+                <button id="deliveryImportBtn" class="secondary">📥 Импорт Excel/CSV</button>
+                <button id="deliveryExportCSVBtn" class="secondary">📤 Экспорт CSV</button>
+                <input type="file" id="deliveryFileInput" accept=".xlsx,.xls,.csv">
+            </div>
+
+            <div class="table-container">
+                <table id="deliveryTable">
+                    <thead>
+                        <tr>
+                            <th>Зона / расстояние</th>
+                            <th>Цена (₽)</th>
+                            <th>Примечание</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <p style="margin-top:10px; font-size:12px; color:#636e72;">
+                ✎ Кликните по ячейке, чтобы изменить. Данные сохраняются автоматически.
+            </p>
         </div>
     </div>
 
     <script>
-        // ---------- PWA ----------
-        (function setupPWA() {
-            if (document.querySelector('link[rel="manifest"]')) return;
-
-            const canvas = document.createElement('canvas');
-            canvas.width = 192; canvas.height = 192;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#0984e3';
-            ctx.fillRect(0, 0, 192, 192);
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 80px Arial';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('M', 96, 96);
-            const iconBase64 = canvas.toDataURL('image/png');
-
-            const manifest = {
-                name: 'MIRTASH Продажи',
-                short_name: 'MIRTASH',
-                description: 'Учёт продаж студии натурального камня',
-                start_url: location.href.split('?')[0],
-                display: 'standalone',
-                background_color: '#2d3436',
-                theme_color: '#2d3436',
-                orientation: 'any',
-                icons: [{
-                    src: iconBase64,
-                    sizes: '192x192',
-                    type: 'image/png',
-                    purpose: 'any maskable'
-                }]
-            };
-
-            const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
-            const manifestURL = URL.createObjectURL(blob);
-            const link = document.createElement('link');
-            link.rel = 'manifest';
-            link.href = manifestURL;
-            document.head.appendChild(link);
-
-            const metaApple = document.createElement('meta');
-            metaApple.name = 'apple-mobile-web-app-capable';
-            metaApple.content = 'yes';
-            document.head.appendChild(metaApple);
-            const metaAppleStatus = document.createElement('meta');
-            metaAppleStatus.name = 'apple-mobile-web-app-status-bar-style';
-            metaAppleStatus.content = 'black-translucent';
-            document.head.appendChild(metaAppleStatus);
-        })();
-
-        // ---------- Основной код приложения ----------
         (function() {
-            const MANAGERS_STORAGE_KEY = 'mirtash_managers';
-            const CURRENT_MANAGER_KEY = 'mirtash_current_manager';
-            const SALES_PREFIX = 'mirtash_sales_';
-
-            const managerSelect = document.getElementById('managerSelect');
-            const manageManagersBtn = document.getElementById('manageManagersBtn');
-            const productInput = document.getElementById('product');
-            const productList = document.getElementById('productList');
-            const priceInput = document.getElementById('price');
-            const quantityInput = document.getElementById('quantity');
-            const saleTimeInput = document.getElementById('saleTime');
-            const totalInput = document.getElementById('total');
-            const addSaleBtn = document.getElementById('addSaleBtn');
-            const clearFormBtn = document.getElementById('clearFormBtn');
-            const salesTableBody = document.querySelector('#salesTable tbody');
-            const filterDateFrom = document.getElementById('filterDateFrom');
-            const filterDateTo = document.getElementById('filterDateTo');
-            const filterBtn = document.getElementById('filterBtn');
-            const resetFilterBtn = document.getElementById('resetFilterBtn');
-            const totalRecordsSpan = document.getElementById('totalRecords');
-            const totalAmountSpan = document.getElementById('totalAmount');
-            const exportCSVBtn = document.getElementById('exportCSVBtn');
-            const clearHistoryBtn = document.getElementById('clearHistoryBtn');
-            const modalOverlay = document.getElementById('modalOverlay');
-            const managersListContainer = document.getElementById('managersListContainer');
-            const newManagerNameInput = document.getElementById('newManagerName');
-            const addManagerBtn = document.getElementById('addManagerBtn');
-            const closeModalBtn = document.getElementById('closeModalBtn');
-
-            function loadManagers() {
-                const stored = localStorage.getItem(MANAGERS_STORAGE_KEY);
-                if (stored) {
-                    try { return JSON.parse(stored); } catch(e) {}
-                }
-                const defaultManagers = ["Алексей", "Мария", "Дмитрий", "Елена", "Сергей"];
-                localStorage.setItem(MANAGERS_STORAGE_KEY, JSON.stringify(defaultManagers));
-                return defaultManagers;
-            }
-
-            function saveManagers(managers) {
-                localStorage.setItem(MANAGERS_STORAGE_KEY, JSON.stringify(managers));
-            }
-
-            function getCurrentManager() {
-                let current = localStorage.getItem(CURRENT_MANAGER_KEY);
-                const managers = loadManagers();
-                if (!current || !managers.includes(current)) {
-                    current = managers[0] || '';
-                    localStorage.setItem(CURRENT_MANAGER_KEY, current);
-                }
-                return current;
-            }
-
-            function setCurrentManager(name) {
-                localStorage.setItem(CURRENT_MANAGER_KEY, name);
-            }
-
-            function refreshManagerSelect() {
-                const managers = loadManagers();
-                managerSelect.innerHTML = '';
-                managers.forEach(m => {
-                    const option = document.createElement('option');
-                    option.value = m;
-                    option.textContent = m;
-                    managerSelect.appendChild(option);
+            // ---------- Переключение вкладок ----------
+            const tabs = document.querySelectorAll('.tab');
+            const contents = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    const target = tab.dataset.tab;
+                    contents.forEach(c => c.classList.remove('active'));
+                    document.getElementById('tab-' + target).classList.add('active');
                 });
-                const current = getCurrentManager();
-                if (managers.includes(current)) {
-                    managerSelect.value = current;
-                } else if (managers.length > 0) {
-                    managerSelect.value = managers[0];
-                    setCurrentManager(managers[0]);
-                }
-            }
+            });
 
-            function getSalesKey(managerName) {
-                return SALES_PREFIX + managerName;
-            }
+            // ==================== МОДУЛЬ ПРОДАЖ ====================
+            (function initSales() {
+                const MANAGERS_KEY = 'mirtash_managers';
+                const CURRENT_KEY = 'mirtash_current_manager';
+                const SALES_PREFIX = 'mirtash_sales_';
 
-            function loadSales(managerName) {
-                const key = getSalesKey(managerName);
-                const data = localStorage.getItem(key);
-                return data ? JSON.parse(data) : [];
-            }
+                const managerSelect = document.getElementById('managerSelect');
+                const manageBtn = document.getElementById('manageManagersBtn');
+                const productInput = document.getElementById('product');
+                const productList = document.getElementById('productList');
+                const priceInput = document.getElementById('price');
+                const quantityInput = document.getElementById('quantity');
+                const timeInput = document.getElementById('saleTime');
+                const totalInput = document.getElementById('total');
+                const addSaleBtn = document.getElementById('addSaleBtn');
+                const clearFormBtn = document.getElementById('clearFormBtn');
+                const salesTableBody = document.querySelector('#salesTable tbody');
+                const filterFrom = document.getElementById('filterDateFrom');
+                const filterTo = document.getElementById('filterDateTo');
+                const filterBtn = document.getElementById('filterBtn');
+                const resetFilterBtn = document.getElementById('resetFilterBtn');
+                const totalRecordsSpan = document.getElementById('totalRecords');
+                const totalAmountSpan = document.getElementById('totalAmount');
+                const exportCSVBtn = document.getElementById('exportCSVBtn');
+                const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+                const modalOverlay = document.getElementById('modalOverlay');
+                const managersListContainer = document.getElementById('managersListContainer');
+                const newManagerNameInput = document.getElementById('newManagerName');
+                const addManagerBtn = document.getElementById('addManagerBtn');
+                const closeModalBtn = document.getElementById('closeModalBtn');
 
-            function saveSales(managerName, sales) {
-                localStorage.setItem(getSalesKey(managerName), JSON.stringify(sales));
-            }
+                let currentManager = '';
 
-            function deleteManagerData(managerName) {
-                localStorage.removeItem(getSalesKey(managerName));
-            }
-
-            function updateProductDatalist() {
-                const sales = loadSales(getCurrentManager());
-                const products = [...new Set(sales.map(s => s.product))].sort();
-                productList.innerHTML = '';
-                products.forEach(p => {
-                    const option = document.createElement('option');
-                    option.value = p;
-                    productList.appendChild(option);
-                });
-            }
-
-            function recalcTotal() {
-                const price = parseFloat(priceInput.value) || 0;
-                const qty = parseFloat(quantityInput.value) || 0;
-                totalInput.value = (price * qty).toFixed(2);
-            }
-
-            function setDefaultTime() {
-                const now = new Date();
-                const hh = String(now.getHours()).padStart(2, '0');
-                const mm = String(now.getMinutes()).padStart(2, '0');
-                saleTimeInput.value = hh + ':' + mm;
-            }
-
-            function clearForm() {
-                productInput.value = '';
-                priceInput.value = '';
-                quantityInput.value = '1';
-                setDefaultTime();
-                totalInput.value = '';
-                productInput.focus();
-            }
-
-            function addSale() {
-                const product = productInput.value.trim();
-                if (!product) {
-                    alert('Введите название товара');
-                    return;
-                }
-                const price = parseFloat(priceInput.value);
-                if (isNaN(price) || price <= 0) {
-                    alert('Цена должна быть больше нуля');
-                    return;
-                }
-                const quantity = parseFloat(quantityInput.value);
-                if (isNaN(quantity) || quantity <= 0) {
-                    alert('Количество должно быть больше нуля');
-                    return;
-                }
-                const time = saleTimeInput.value || '00:00';
-                const total = parseFloat((price * quantity).toFixed(2));
-                const today = new Date().toISOString().split('T')[0];
-
-                const sale = {
-                    id: Date.now(),
-                    date: today,
-                    time: time,
-                    product: product,
-                    price: price,
-                    quantity: quantity,
-                    total: total
-                };
-
-                const manager = getCurrentManager();
-                const sales = loadSales(manager);
-                sales.unshift(sale);
-                saveSales(manager, sales);
-                clearForm();
-                renderTable();
-                updateProductDatalist();
-            }
-
-            function renderTable(filterFrom = null, filterTo = null) {
-                const manager = getCurrentManager();
-                const sales = loadSales(manager);
-                let filtered = [...sales];
-
-                if (filterFrom) {
-                    filtered = filtered.filter(s => s.date >= filterFrom);
-                }
-                if (filterTo) {
-                    filtered = filtered.filter(s => s.date <= filterTo);
+                function loadManagers() {
+                    const stored = localStorage.getItem(MANAGERS_KEY);
+                    if (stored) {
+                        try { return JSON.parse(stored); } catch(e) {}
+                    }
+                    const def = ["Алексей", "Мария", "Дмитрий", "Елена", "Сергей"];
+                    localStorage.setItem(MANAGERS_KEY, JSON.stringify(def));
+                    return def;
                 }
 
-                filtered.sort((a, b) => {
-                    if (a.date !== b.date) return b.date.localeCompare(a.date);
-                    return b.time.localeCompare(a.time) || b.id - a.id;
-                });
+                function saveManagers(managers) {
+                    localStorage.setItem(MANAGERS_KEY, JSON.stringify(managers));
+                }
 
-                salesTableBody.innerHTML = '';
-                if (filtered.length === 0) {
-                    salesTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">Нет записей</td></tr>';
-                } else {
-                    filtered.forEach(s => {
-                        const row = document.createElement('tr');
-                        row.innerHTML = `
-                            <td>${s.date}</td>
-                            <td>${escapeHtml(s.time)}</td>
-                            <td>${escapeHtml(s.product)}</td>
-                            <td>${s.price.toFixed(2)}</td>
-                            <td>${s.quantity}</td>
-                            <td><strong>${s.total.toFixed(2)}</strong></td>
-                        `;
-                        salesTableBody.appendChild(row);
+                function getCurrent() {
+                    let cur = localStorage.getItem(CURRENT_KEY);
+                    const managers = loadManagers();
+                    if (!cur || !managers.includes(cur)) {
+                        cur = managers[0] || '';
+                        localStorage.setItem(CURRENT_KEY, cur);
+                    }
+                    return cur;
+                }
+
+                function setCurrent(name) {
+                    localStorage.setItem(CURRENT_KEY, name);
+                }
+
+                function refreshSelect() {
+                    const managers = loadManagers();
+                    managerSelect.innerHTML = '';
+                    managers.forEach(m => {
+                        const opt = document.createElement('option');
+                        opt.value = m;
+                        opt.textContent = m;
+                        managerSelect.appendChild(opt);
                     });
-                }
-
-                const totalQty = filtered.reduce((sum, s) => sum + s.quantity, 0);
-                const totalSum = filtered.reduce((sum, s) => sum + s.total, 0);
-                totalRecordsSpan.textContent = filtered.length;
-                totalAmountSpan.textContent = totalSum.toFixed(2);
-            }
-
-            function escapeHtml(text) {
-                const div = document.createElement('div');
-                div.textContent = text;
-                return div.innerHTML;
-            }
-
-            function exportToCSV() {
-                const manager = getCurrentManager();
-                const sales = loadSales(manager);
-                if (sales.length === 0) {
-                    alert('Нет данных для экспорта');
-                    return;
-                }
-                let csv = "data:text/csv;charset=utf-8,";
-                csv += "Дата,Время,Товар,Цена за шт,Количество,Сумма\n";
-                sales.forEach(s => {
-                    const row = [
-                        s.date,
-                        s.time,
-                        `"${s.product.replace(/"/g, '""')}"`,
-                        s.price,
-                        s.quantity,
-                        s.total
-                    ].join(',');
-                    csv += row + "\n";
-                });
-                const uri = encodeURI(csv);
-                const link = document.createElement('a');
-                link.href = uri;
-                link.download = `sales_${manager}_${new Date().toISOString().slice(0,10)}.csv`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            }
-
-            function clearHistory() {
-                const manager = getCurrentManager();
-                if (confirm(`Удалить ВСЕ продажи менеджера ${manager}? Это необратимо.`)) {
-                    saveSales(manager, []);
-                    renderTable();
-                    updateProductDatalist();
-                }
-            }
-
-            function switchManager(name) {
-                if (!name) return;
-                const managers = loadManagers();
-                if (!managers.includes(name)) {
-                    name = managers[0];
-                    if (!name) return;
-                }
-                setCurrentManager(name);
-                managerSelect.value = name;
-                filterDateFrom.value = '';
-                filterDateTo.value = '';
-                renderTable();
-                updateProductDatalist();
-                productInput.focus();
-            }
-
-            function renderManagerListInModal() {
-                const managers = loadManagers();
-                managersListContainer.innerHTML = '';
-                managers.forEach((m, index) => {
-                    const div = document.createElement('div');
-                    div.className = 'manager-list-item';
-                    const input = document.createElement('input');
-                    input.type = 'text';
-                    input.value = m;
-                    input.dataset.index = index;
-                    input.addEventListener('change', () => {
-                        renameManager(index, input.value.trim());
-                    });
-                    const deleteBtn = document.createElement('button');
-                    deleteBtn.textContent = '❌';
-                    deleteBtn.className = 'danger small';
-                    deleteBtn.addEventListener('click', () => {
-                        deleteManager(index);
-                    });
-                    if (managers.length <= 1) deleteBtn.disabled = true;
-                    div.appendChild(input);
-                    div.appendChild(deleteBtn);
-                    managersListContainer.appendChild(div);
-                });
-            }
-
-            function renameManager(index, newName) {
-                const managers = loadManagers();
-                if (index < 0 || index >= managers.length) return;
-                const oldName = managers[index];
-                if (!newName || newName === oldName) return;
-                if (managers.some((m, i) => i !== index && m === newName)) {
-                    alert('Менеджер с таким именем уже существует');
-                    renderManagerListInModal();
-                    return;
-                }
-                managers[index] = newName;
-                saveManagers(managers);
-
-                if (oldName !== newName) {
-                    const oldSales = loadSales(oldName);
-                    if (oldSales.length > 0) {
-                        if (confirm(`Перенести ${oldSales.length} продаж со старого имени "${oldName}" на "${newName}"?`)) {
-                            const newSales = loadSales(newName);
-                            saveSales(newName, [...oldSales, ...newSales]);
-                            deleteManagerData(oldName);
-                        }
+                    const cur = getCurrent();
+                    if (managers.includes(cur)) managerSelect.value = cur;
+                    else if (managers.length) {
+                        managerSelect.value = managers[0];
+                        setCurrent(managers[0]);
                     }
                 }
 
-                if (getCurrentManager() === oldName) {
-                    setCurrentManager(newName);
+                function getSalesKey(name) {
+                    return SALES_PREFIX + name;
                 }
-                refreshManagerSelect();
-                renderManagerListInModal();
+
+                function loadSales(name) {
+                    const data = localStorage.getItem(getSalesKey(name));
+                    return data ? JSON.parse(data) : [];
+                }
+
+                function saveSales(name, sales) {
+                    localStorage.setItem(getSalesKey(name), JSON.stringify(sales));
+                }
+
+                function deleteManagerData(name) {
+                    localStorage.removeItem(getSalesKey(name));
+                }
+
+                function updateDatalist() {
+                    const sales = loadSales(getCurrent());
+                    const products = [...new Set(sales.map(s => s.product))].sort();
+                    productList.innerHTML = '';
+                    products.forEach(p => {
+                        const opt = document.createElement('option');
+                        opt.value = p;
+                        productList.appendChild(opt);
+                    });
+                }
+
+                function recalcTotal() {
+                    const p = parseFloat(priceInput.value) || 0;
+                    const q = parseFloat(quantityInput.value) || 0;
+                    totalInput.value = (p * q).toFixed(2);
+                }
+
+                function setDefaultTime() {
+                    const now = new Date();
+                    const hh = String(now.getHours()).padStart(2, '0');
+                    const mm = String(now.getMinutes()).padStart(2, '0');
+                    timeInput.value = hh + ':' + mm;
+                }
+
+                function clearForm() {
+                    productInput.value = '';
+                    priceInput.value = '';
+                    quantityInput.value = '1';
+                    setDefaultTime();
+                    totalInput.value = '';
+                    productInput.focus();
+                }
+
+                function addSale() {
+                    const product = productInput.value.trim();
+                    if (!product) { alert('Введите товар'); return; }
+                    const price = parseFloat(priceInput.value);
+                    if (isNaN(price) || price <= 0) { alert('Цена > 0'); return; }
+                    const qty = parseFloat(quantityInput.value);
+                    if (isNaN(qty) || qty <= 0) { alert('Количество > 0'); return; }
+                    const time = timeInput.value || '00:00';
+                    const total = parseFloat((price * qty).toFixed(2));
+                    const today = new Date().toISOString().split('T')[0];
+
+                    const sale = {
+                        id: Date.now(),
+                        date: today,
+                        time,
+                        product,
+                        price,
+                        quantity: qty,
+                        total
+                    };
+
+                    const mgr = getCurrent();
+                    const sales = loadSales(mgr);
+                    sales.unshift(sale);
+                    saveSales(mgr, sales);
+                    clearForm();
+                    renderSalesTable();
+                    updateDatalist();
+                }
+
+                function escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+
+                function renderSalesTable(filterFromVal = null, filterToVal = null) {
+                    const mgr = getCurrent();
+                    const sales = loadSales(mgr);
+                    let filtered = [...sales];
+                    if (filterFromVal) filtered = filtered.filter(s => s.date >= filterFromVal);
+                    if (filterToVal) filtered = filtered.filter(s => s.date <= filterToVal);
+
+                    filtered.sort((a, b) => {
+                        if (a.date !== b.date) return b.date.localeCompare(a.date);
+                        return b.time.localeCompare(a.time) || b.id - a.id;
+                    });
+
+                    salesTableBody.innerHTML = '';
+                    if (filtered.length === 0) {
+                        salesTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#999;">Нет записей</td></tr>';
+                    } else {
+                        filtered.forEach(s => {
+                            const row = document.createElement('tr');
+                            row.innerHTML = `
+                                <td>${s.date}</td>
+                                <td>${escapeHtml(s.time)}</td>
+                                <td>${escapeHtml(s.product)}</td>
+                                <td>${s.price.toFixed(2)}</td>
+                                <td>${s.quantity}</td>
+                                <td><strong>${s.total.toFixed(2)}</strong></td>
+                            `;
+                            salesTableBody.appendChild(row);
+                        });
+                    }
+
+                    const totalQty = filtered.reduce((sum, s) => sum + s.quantity, 0);
+                    const totalSum = filtered.reduce((sum, s) => sum + s.total, 0);
+                    totalRecordsSpan.textContent = filtered.length;
+                    totalAmountSpan.textContent = totalSum.toFixed(2);
+                }
+
+                function exportSalesCSV() {
+                    const mgr = getCurrent();
+                    const sales = loadSales(mgr);
+                    if (!sales.length) { alert('Нет данных'); return; }
+                    let csv = "data:text/csv;charset=utf-8,Дата,Время,Товар,Цена за шт,Количество,Сумма\n";
+                    sales.forEach(s => {
+                        const row = [
+                            s.date,
+                            s.time,
+                            `"${s.product.replace(/"/g, '""')}"`,
+                            s.price,
+                            s.quantity,
+                            s.total
+                        ].join(',');
+                        csv += row + "\n";
+                    });
+                    const uri = encodeURI(csv);
+                    const link = document.createElement('a');
+                    link.href = uri;
+                    link.download = `sales_${mgr}_${new Date().toISOString().slice(0,10)}.csv`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+
+                function clearHistory() {
+                    const mgr = getCurrent();
+                    if (confirm(`Удалить все продажи менеджера ${mgr}?`)) {
+                        saveSales(mgr, []);
+                        renderSalesTable();
+                        updateDatalist();
+                    }
+                }
+
+                function switchManager(name) {
+                    if (!name) return;
+                    const managers = loadManagers();
+                    if (!managers.includes(name)) name = managers[0] || '';
+                    setCurrent(name);
+                    managerSelect.value = name;
+                    filterFrom.value = '';
+                    filterTo.value = '';
+                    renderSalesTable();
+                    updateDatalist();
+                    productInput.focus();
+                }
+
+                // Управление менеджерами (модальное)
+                function renderManagerList() {
+                    const managers = loadManagers();
+                    managersListContainer.innerHTML = '';
+                    managers.forEach((m, i) => {
+                        const div = document.createElement('div');
+                        div.className = 'manager-list-item';
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.value = m;
+                        input.dataset.index = i;
+                        input.addEventListener('change', () => renameManager(i, input.value.trim()));
+                        const delBtn = document.createElement('button');
+                        delBtn.textContent = '❌';
+                        delBtn.className = 'danger small';
+                        delBtn.addEventListener('click', () => deleteManager(i));
+                        if (managers.length <= 1) delBtn.disabled = true;
+                        div.appendChild(input);
+                        div.appendChild(delBtn);
+                        managersListContainer.appendChild(div);
+                    });
+                }
+
+                function renameManager(index, newName) {
+                    const managers = loadManagers();
+                    if (index < 0 || index >= managers.length) return;
+                    const oldName = managers[index];
+                    if (!newName || newName === oldName) return;
+                    if (managers.some((m, i) => i !== index && m === newName)) {
+                        alert('Менеджер с таким именем уже существует');
+                        renderManagerList();
+                        return;
+                    }
+                    managers[index] = newName;
+                    saveManagers(managers);
+                    if (oldName !== newName) {
+                        const oldSales = loadSales(oldName);
+                        if (oldSales.length) {
+                            if (confirm(`Перенести ${oldSales.length} продаж со старого имени "${oldName}" на "${newName}"?`)) {
+                                const newSales = loadSales(newName);
+                                saveSales(newName, [...oldSales, ...newSales]);
+                                deleteManagerData(oldName);
+                            }
+                        }
+                    }
+                    if (getCurrent() === oldName) setCurrent(newName);
+                    refreshSelect();
+                    renderManagerList();
+                    renderSalesTable();
+                }
+
+                function deleteManager(index) {
+                    const managers = loadManagers();
+                    if (managers.length <= 1) { alert('Нельзя удалить последнего'); return; }
+                    const name = managers[index];
+                    if (!confirm(`Удалить менеджера "${name}" и все его данные?`)) return;
+                    deleteManagerData(name);
+                    managers.splice(index, 1);
+                    saveManagers(managers);
+                    if (getCurrent() === name) setCurrent(managers[0]);
+                    refreshSelect();
+                    renderManagerList();
+                    renderSalesTable();
+                }
+
+                function addManager() {
+                    const name = newManagerNameInput.value.trim();
+                    if (!name) { alert('Введите имя'); return; }
+                    const managers = loadManagers();
+                    if (managers.includes(name)) { alert('Уже существует'); return; }
+                    managers.push(name);
+                    saveManagers(managers);
+                    refreshSelect();
+                    renderManagerList();
+                    newManagerNameInput.value = '';
+                }
+
+                // Привязка событий
+                priceInput.addEventListener('input', recalcTotal);
+                quantityInput.addEventListener('input', recalcTotal);
+                addSaleBtn.addEventListener('click', addSale);
+                clearFormBtn.addEventListener('click', clearForm);
+                managerSelect.addEventListener('change', () => switchManager(managerSelect.value));
+                filterBtn.addEventListener('click', () => renderSalesTable(filterFrom.value, filterTo.value));
+                resetFilterBtn.addEventListener('click', () => {
+                    filterFrom.value = '';
+                    filterTo.value = '';
+                    renderSalesTable();
+                });
+                exportCSVBtn.addEventListener('click', exportSalesCSV);
+                clearHistoryBtn.addEventListener('click', clearHistory);
+                manageBtn.addEventListener('click', () => {
+                    renderManagerList();
+                    modalOverlay.style.display = 'flex';
+                    newManagerNameInput.focus();
+                });
+                closeModalBtn.addEventListener('click', () => modalOverlay.style.display = 'none');
+                modalOverlay.addEventListener('click', (e) => {
+                    if (e.target === modalOverlay) modalOverlay.style.display = 'none';
+                });
+                addManagerBtn.addEventListener('click', addManager);
+                newManagerNameInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') addManager();
+                });
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' && document.activeElement.tagName === 'INPUT' &&
+                        !e.target.closest('#modalOverlay') && e.target.closest('#tab-sales')) {
+                        e.preventDefault();
+                        addSale();
+                    }
+                });
+
+                // Старт
+                refreshSelect();
+                currentManager = getCurrent();
+                managerSelect.value = currentManager;
+                setDefaultTime();
+                renderSalesTable();
+                updateDatalist();
+            })();
+
+            // ==================== МОДУЛЬ КАЛЬКУЛЯТОРА ОТСЫПКИ ====================
+            (function initCalculator() {
+                const STORAGE_KEY = 'mirtash_decor_densities';
+                const DEFAULT_MATERIALS = [
+                    { name: "Мрамор белый колотый", density: 1.5, fractions: ["3-5 мм", "5-10 мм", "10-20 мм", "20-40 мм", "40-70 мм", "60-90 мм"] },
+                    { name: "Златолит колотый желтый", density: 1.5, fractions: ["5-10 мм", "10-20 мм", "20-40 мм"] },
+                    { name: "Змеевик колотый зеленый", density: 1.5, fractions: ["5-10 мм", "10-20 мм", "20-40 мм"] },
+                    { name: "Яшма колотая красная", density: 1.5, fractions: ["5-10 мм", "10-20 мм", "20-40 мм"] },
+                    { name: "Фельзит оранжевый колотый", density: 1.5, fractions: ["5-10 мм", "10-20 мм", "20-40 мм"] },
+                    { name: "Галька", density: 1.6, fractions: ["3-5 мм", "5-10 мм", "10-20 мм", "20-40 мм", "40-70 мм", "60-90 мм"] }
+                ];
+
+                const areaInput = document.getElementById('calcArea');
+                const thicknessInput = document.getElementById('calcThickness');
+                const materialSelect = document.getElementById('calcMaterial');
+                const fractionSelect = document.getElementById('calcFraction');
+                const customDensityInput = document.getElementById('calcCustomDensity');
+                const volumeSpan = document.getElementById('calcVolume');
+                const weightTonSpan = document.getElementById('calcWeightTon');
+                const weightKgSpan = document.getElementById('calcWeightKg');
+                const bagsSpan = document.getElementById('calcBags');
+                const bagsExactSpan = document.getElementById('calcBagsExact');
+                const resetBtn = document.getElementById('calcResetBtn');
+                const densityTableBody = document.querySelector('#calcDensityTable tbody');
+                const resetDensitiesBtn = document.getElementById('calcResetDensitiesBtn');
+
+                let materials = [];
+
+                function loadMaterials() {
+                    const stored = localStorage.getItem(STORAGE_KEY);
+                    if (stored) {
+                        try {
+                            materials = JSON.parse(stored);
+                            materials.forEach(m => {
+                                if (!m.fractions) {
+                                    const def = DEFAULT_MATERIALS.find(d => d.name === m.name);
+                                    m.fractions = def ? def.fractions : ["5-10 мм", "10-20 мм", "20-40 мм"];
+                                }
+                            });
+                        } catch(e) {
+                            materials = DEFAULT_MATERIALS.map(m => ({...m}));
+                        }
+                    } else {
+                        materials = DEFAULT_MATERIALS.map(m => ({...m}));
+                    }
+                    saveMaterials();
+                }
+
+                function saveMaterials() {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(materials));
+                }
+
+                function populateMaterialSelect() {
+                    materialSelect.innerHTML = '<option value="">-- выберите --</option>';
+                    materials.forEach((mat, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = idx;
+                        opt.textContent = mat.name + ` (${mat.density} т/м³)`;
+                        materialSelect.appendChild(opt);
+                    });
+                    fractionSelect.innerHTML = '';
+                }
+
+                function updateFractionSelect() {
+                    const idx = materialSelect.value;
+                    fractionSelect.innerHTML = '';
+                    if (idx === '') return;
+                    const mat = materials[parseInt(idx)];
+                    if (!mat || !mat.fractions) return;
+                    mat.fractions.forEach(frac => {
+                        const opt = document.createElement('option');
+                        opt.value = frac;
+                        opt.textContent = frac;
+                        fractionSelect.appendChild(opt);
+                    });
+                }
+
+                function renderDensityTable() {
+                    densityTableBody.innerHTML = '';
+                    materials.forEach((mat, idx) => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td contenteditable="true" data-field="name" data-index="${idx}">${escapeHtml(mat.name)}</td>
+                            <td contenteditable="true" data-field="density" data-index="${idx}">${mat.density}</td>
+                            <td><button class="delete-btn danger" data-index="${idx}">❌</button></td>
+                        `;
+                        densityTableBody.appendChild(row);
+                    });
+                }
+
+                function calculate() {
+                    const area = parseFloat(areaInput.value);
+                    const thicknessCm = parseFloat(thicknessInput.value);
+                    if (isNaN(area) || area <= 0 || isNaN(thicknessCm) || thicknessCm <= 0) {
+                        volumeSpan.textContent = '—';
+                        weightTonSpan.textContent = '—';
+                        weightKgSpan.textContent = '—';
+                        bagsSpan.textContent = '—';
+                        bagsExactSpan.textContent = '—';
+                        return;
+                    }
+
+                    const thicknessM = thicknessCm / 100;
+                    const volume = area * thicknessM;
+                    volumeSpan.textContent = volume.toFixed(2);
+
+                    let density = null;
+                    if (customDensityInput.value.trim() !== '') {
+                        density = parseFloat(customDensityInput.value);
+                        if (isNaN(density) || density < 0) density = null;
+                    }
+                    if (density === null && materialSelect.value !== '') {
+                        const idx = parseInt(materialSelect.value);
+                        if (!isNaN(idx) && materials[idx]) density = materials[idx].density;
+                    }
+
+                    if (density !== null) {
+                        const weightTon = volume * density;
+                        const weightKg = weightTon * 1000;
+                        const bagsExact = weightKg / 25;
+                        const bagsCeil = Math.ceil(bagsExact);
+                        weightTonSpan.textContent = weightTon.toFixed(2);
+                        weightKgSpan.textContent = weightKg.toFixed(0);
+                        bagsExactSpan.textContent = bagsExact.toFixed(1);
+                        bagsSpan.textContent = bagsCeil;
+                    } else {
+                        weightTonSpan.textContent = '—';
+                        weightKgSpan.textContent = '—';
+                        bagsSpan.textContent = '—';
+                        bagsExactSpan.textContent = '—';
+                    }
+                }
+
+                function resetCalculator() {
+                    areaInput.value = '';
+                    thicknessInput.value = '';
+                    materialSelect.value = '';
+                    fractionSelect.innerHTML = '';
+                    customDensityInput.value = '';
+                    volumeSpan.textContent = '—';
+                    weightTonSpan.textContent = '—';
+                    weightKgSpan.textContent = '—';
+                    bagsSpan.textContent = '—';
+                    bagsExactSpan.textContent = '—';
+                }
+
+                function escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+
+                // События
+                [areaInput, thicknessInput, materialSelect, customDensityInput, fractionSelect].forEach(el => {
+                    el.addEventListener('input', calculate);
+                    el.addEventListener('change', calculate);
+                });
+                materialSelect.addEventListener('change', updateFractionSelect);
+                resetBtn.addEventListener('click', resetCalculator);
+
+                densityTableBody.addEventListener('input', function(e) {
+                    const cell = e.target;
+                    if (!cell.hasAttribute('contenteditable') || !cell.dataset.field) return;
+                    const idx = parseInt(cell.dataset.index);
+                    const field = cell.dataset.field;
+                    let newValue = cell.textContent.trim();
+                    if (field === 'density') newValue = parseFloat(newValue) || 0;
+                    materials[idx][field] = newValue;
+                    saveMaterials();
+                    const selectedIdx = materialSelect.value;
+                    populateMaterialSelect();
+                    if (selectedIdx !== '') materialSelect.value = selectedIdx;
+                    updateFractionSelect();
+                    calculate();
+                });
+
+                densityTableBody.addEventListener('click', function(e) {
+                    if (e.target.classList.contains('delete-btn') || e.target.closest('.delete-btn')) {
+                        const btn = e.target.closest('.delete-btn');
+                        const idx = parseInt(btn.dataset.index);
+                        if (confirm('Удалить материал «' + materials[idx].name + '»?')) {
+                            materials.splice(idx, 1);
+                            saveMaterials();
+                            populateMaterialSelect();
+                            updateFractionSelect();
+                            renderDensityTable();
+                            calculate();
+                        }
+                    }
+                });
+
+                resetDensitiesBtn.addEventListener('click', function() {
+                    if (confirm('Вернуть стандартный набор декоративных материалов?')) {
+                        materials = DEFAULT_MATERIALS.map(m => ({...m}));
+                        saveMaterials();
+                        populateMaterialSelect();
+                        updateFractionSelect();
+                        renderDensityTable();
+                        calculate();
+                    }
+                });
+
+                // Старт
+                loadMaterials();
+                populateMaterialSelect();
+                updateFractionSelect();
+                renderDensityTable();
+                resetCalculator();
+            })();
+
+            // ==================== МОДУЛЬ ДОСТАВКИ МАНИПУЛЯТОРА ====================
+            (function initDelivery() {
+                const STORAGE_KEY = 'mirtash_delivery_prices';
+                const tableBody = document.querySelector('#deliveryTable tbody');
+                const searchInput = document.getElementById('deliverySearch');
+                const addRowBtn = document.getElementById('deliveryAddRowBtn');
+                const importBtn = document.getElementById('deliveryImportBtn');
+                const exportCSVBtn = document.getElementById('deliveryExportCSVBtn');
+                const fileInput = document.getElementById('deliveryFileInput');
+                let prices = [];
+
+                function loadPrices() {
+                    const stored = localStorage.getItem(STORAGE_KEY);
+                    if (stored) {
+                        try { prices = JSON.parse(stored); } catch(e) { prices = getDefault(); }
+                    } else {
+                        prices = getDefault();
+                    }
+                }
+
+                function getDefault() {
+                    return [
+                        { zone: "По городу (0-10 км)", price: 5000, note: "" },
+                        { zone: "Пригород (11-30 км)", price: 8000, note: "" },
+                        { zone: "Район (31-60 км)", price: 12000, note: "Каждый доп. км +50₽" },
+                        { zone: "Дальний (61-100 км)", price: 18000, note: "" },
+                        { zone: "Свыше 100 км", price: 25000, note: "Цена договорная" }
+                    ];
+                }
+
+                function savePrices() {
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(prices));
+                }
+
+                function renderTable(filterText = '') {
+                    tableBody.innerHTML = '';
+                    const filter = filterText.toLowerCase().trim();
+                    const filtered = filter
+                        ? prices.filter(item => Object.values(item).some(val => String(val).toLowerCase().includes(filter)))
+                        : prices;
+
+                    if (!filtered.length) {
+                        tableBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#999;">Ничего не найдено</td></tr>';
+                        return;
+                    }
+
+                    filtered.forEach(item => {
+                        const idx = prices.indexOf(item);
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td contenteditable="true" data-field="zone" data-index="${idx}">${escapeHtml(item.zone)}</td>
+                            <td contenteditable="true" data-field="price" data-index="${idx}">${item.price}</td>
+                            <td contenteditable="true" data-field="note" data-index="${idx}">${escapeHtml(item.note)}</td>
+                            <td><button class="delete-btn danger" data-index="${idx}">❌</button></td>
+                        `;
+                        tableBody.appendChild(row);
+                    });
+                }
+
+                function escapeHtml(text) {
+                    const div = document.createElement('div');
+                    div.textContent = text;
+                    return div.innerHTML;
+                }
+
+                tableBody.addEventListener('input', function(e) {
+                    const cell = e.target;
+                    if (!cell.hasAttribute('contenteditable') || !cell.dataset.field) return;
+                    const idx = parseInt(cell.dataset.index);
+                    const field = cell.dataset.field;
+                    const newValue = field === 'price' ? parseFloat(cell.textContent) || 0 : cell.textContent.trim();
+                    prices[idx][field] = newValue;
+                    savePrices();
+                });
+
+                tableBody.addEventListener('click', function(e) {
+                    if (e.target.classList.contains('delete-btn') || e.target.closest('.delete-btn')) {
+                        const btn = e.target.closest('.delete-btn');
+                        const idx = parseInt(btn.dataset.index);
+                        if (confirm('Удалить эту строку?')) {
+                            prices.splice(idx, 1);
+                            savePrices();
+                            renderTable(searchInput.value);
+                        }
+                    }
+                });
+
+                addRowBtn.addEventListener('click', function() {
+                    prices.push({ zone: '', price: 0, note: '' });
+                    savePrices();
+                    renderTable(searchInput.value);
+                    const lastCell = tableBody.querySelector('tr:last-child td[contenteditable]');
+                    if (lastCell) lastCell.focus();
+                });
+
+                searchInput.addEventListener('input', function() {
+                    renderTable(this.value);
+                });
+
+                exportCSVBtn.addEventListener('click', function() {
+                    if (!prices.length) { alert('Нет данных'); return; }
+                    let csv = "data:text/csv;charset=utf-8,Зона/Расстояние,Цена (₽),Примечание\n";
+                    prices.forEach(item => {
+                        csv += [
+                            `"${item.zone.replace(/"/g, '""')}"`,
+                            item.price,
+                            `"${item.note.replace(/"/g, '""')}"`
+                        ].join(',') + "\n";
+                    });
+                    const uri = encodeURI(csv);
+                    const link = document.createElement('a');
+                    link.href = uri;
+                    link.download = 'delivery_prices.csv';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                });
+
+                importBtn.addEventListener('click', () => fileInput.click());
+
+                fileInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = function(loadEvent) {
+                        try {
+                            const data = new Uint8Array(loadEvent.target.result);
+                            const workbook = XLSX.read(data, { type: 'array' });
+                            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                            const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+                            if (!rows.length) { alert('Файл пуст'); return; }
+                            let startRow = 0;
+                            const headers = rows[0].map(h => String(h).toLowerCase());
+                            if (headers.some(h => h.includes('зона') || h.includes('цена') || h.includes('расст'))) {
+                                startRow = 1;
+                            }
+                            const newEntries = [];
+                            for (let i = startRow; i < rows.length; i++) {
+                                const row = rows[i];
+                                if (!row || row.every(cell => cell === '' || cell === undefined)) continue;
+                                newEntries.push({
+                                    zone: row[0] ? String(row[0]).trim() : '',
+                                    price: parseFloat(row[1]) || 0,
+                                    note: row[2] ? String(row[2]).trim() : ''
+                                });
+                            }
+                            if (!newEntries.length) { alert('Нет данных для импорта'); return; }
+                            const replace = confirm('ОК — ЗАМЕНИТЬ все данные.\nОтмена — ДОБАВИТЬ к существующим.');
+                            if (replace) prices = newEntries;
+                            else prices = prices.concat(newEntries);
+                            savePrices();
+                            renderTable(searchInput.value);
+                            alert(`Импортировано ${newEntries.length} строк.`);
+                        } catch (err) {
+                            alert('Ошибка чтения файла. Убедитесь, что это Excel или CSV.');
+                            console.error(err);
+                        }
+                    };
+                    reader.readAsArrayBuffer(file);
+                    fileInput.value = '';
+                });
+
+                // Старт
+                loadPrices();
                 renderTable();
-            }
-
-            function deleteManager(index) {
-                const managers = loadManagers();
-                if (managers.length <= 1) {
-                    alert('Нельзя удалить последнего менеджера');
-                    return;
-                }
-                const nameToDelete = managers[index];
-                if (!confirm(`Удалить менеджера "${nameToDelete}" и все его данные о продажах?`)) return;
-
-                deleteManagerData(nameToDelete);
-                managers.splice(index, 1);
-                saveManagers(managers);
-
-                if (getCurrentManager() === nameToDelete) {
-                    setCurrentManager(managers[0]);
-                }
-                refreshManagerSelect();
-                renderManagerListInModal();
-                renderTable();
-            }
-
-            function addNewManager() {
-                const name = newManagerNameInput.value.trim();
-                if (!name) {
-                    alert('Введите имя');
-                    return;
-                }
-                const managers = loadManagers();
-                if (managers.includes(name)) {
-                    alert('Менеджер с таким именем уже существует');
-                    return;
-                }
-                managers.push(name);
-                saveManagers(managers);
-                refreshManagerSelect();
-                renderManagerListInModal();
-                newManagerNameInput.value = '';
-            }
-
-            manageManagersBtn.addEventListener('click', () => {
-                renderManagerListInModal();
-                modalOverlay.style.display = 'flex';
-                newManagerNameInput.focus();
-            });
-
-            closeModalBtn.addEventListener('click', () => {
-                modalOverlay.style.display = 'none';
-            });
-            modalOverlay.addEventListener('click', (e) => {
-                if (e.target === modalOverlay) modalOverlay.style.display = 'none';
-            });
-            addManagerBtn.addEventListener('click', addNewManager);
-            newManagerNameInput.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') addNewManager();
-            });
-
-            priceInput.addEventListener('input', recalcTotal);
-            quantityInput.addEventListener('input', recalcTotal);
-            addSaleBtn.addEventListener('click', addSale);
-            clearFormBtn.addEventListener('click', clearForm);
-
-            managerSelect.addEventListener('change', () => {
-                switchManager(managerSelect.value);
-            });
-
-            filterBtn.addEventListener('click', () => {
-                renderTable(filterDateFrom.value, filterDateTo.value);
-            });
-            resetFilterBtn.addEventListener('click', () => {
-                filterDateFrom.value = '';
-                filterDateTo.value = '';
-                renderTable();
-            });
-
-            exportCSVBtn.addEventListener('click', exportToCSV);
-            clearHistoryBtn.addEventListener('click', clearHistory);
-
-            document.addEventListener('keydown', (e) => {
-                if (e.key === 'Enter' && document.activeElement.tagName === 'INPUT' &&
-                    !e.target.closest('#modalOverlay')) {
-                    e.preventDefault();
-                    addSale();
-                }
-            });
-
-            refreshManagerSelect();
-            const current = getCurrentManager();
-            managerSelect.value = current;
-            setDefaultTime();
-            renderTable();
-            updateProductDatalist();
+            })();
         })();
     </script>
 </body>
