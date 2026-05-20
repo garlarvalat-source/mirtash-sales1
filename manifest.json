@@ -1,0 +1,17 @@
+{
+  "name": "MIRTASH Продажи",
+  "short_name": "MIRTASH",
+  "description": "Учёт продаж студии натурального камня",
+  "start_url": "/mirtash-sales1/",
+  "display": "standalone",
+  "background_color": "#2d3436",
+  "theme_color": "#2d3436",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
